@@ -19,7 +19,7 @@
   <h3 align="center">FingerStick</h3>
 
   <p align="center">
-    Hold <kbd>Control</kbd>. A pointing hand on a stick taps your screen. <em>Tok tok tok.</em>
+    Hold <kbd>Control</kbd> (or any modifier you pick). A pointing hand on a stick taps your screen. <em>Tok tok tok.</em>
     <br />
     <a href="#installation"><strong>Install it »</strong></a>
     <br />
@@ -66,7 +66,7 @@
 You know those videos where someone explains things by tapping the screen with a little hand-on-a-stick
 pointer, *tok tok tok*, over and over? FingerStick puts that pointer on your Mac.
 
-Hold <kbd>Control</kbd> and the stick appears with its fingertip right on your mouse cursor. It keeps
+Hold <kbd>Control</kbd> (or Option, Command, Shift or Fn) and the stick appears with its fingertip right on your mouse cursor. It keeps
 tapping, with a clacky sound on every hit, until you let go. Great for screen recordings, live demos,
 teaching, and mildly annoying your coworkers on a screen share.
 
@@ -78,7 +78,8 @@ teaching, and mildly annoying your coworkers on a screen share.
 
 * **No permissions.** No Accessibility or Input Monitoring prompts. It only reads which modifier keys are down.
 * **Stays out of the way.** The overlay ignores clicks and never takes focus. It is set to float above full-screen apps and to follow you across Spaces and displays.
-* **18 sounds.** Four synthesized taps (Clack, Knock, Tick, Bonk) plus every built-in macOS alert sound.
+* **Any sound.** Four synthesized taps (Clack, Knock, Tick, Bonk), every built-in macOS alert sound, or your own audio file.
+* **Your key.** Trigger it with Control, Option, Command, Shift or Fn.
 * **Tiny.** One Swift file, all art drawn in code, no dependencies. Lives in the menu bar as ☝️.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -139,16 +140,20 @@ cd finger-stick
 
 | Do this | What happens |
 |---|---|
-| Hold <kbd>Control</kbd> on its own | The stick appears at the cursor and taps until you let go |
+| Hold the trigger key (<kbd>Control</kbd> by default) on its own | The stick appears at the cursor and taps until you let go |
 | Move the mouse while holding | The stick follows the cursor |
-| Click ☝️ → **Sound** | Pick a sound. It plays a preview and is remembered |
-| Click ☝️ → **Quit FingerStick** | Quit |
+| ☝️ → **Trigger Key** | Use Control, Option, Command, Shift or Fn instead |
+| ☝️ → **Sound** | Pick a sound. It plays a preview and is remembered |
+| ☝️ → **Sound** → **Choose Sound File…** | Use your own AIFF, WAV, MP3 or M4A. Short clips work best |
+| ☝️ → **Launch at Login** | Start FingerStick when you log in (macOS 13+) |
+| ☝️ → **Quit FingerStick** | Quit |
 
-Control has to be held on its own for 0.15 s before the stick shows, so a quick press or a fast shortcut
-like <kbd>⌃</kbd><kbd>C</kbd> doesn't trigger it. If you hold Control longer (say, for a <kbd>⌃</kbd>-click),
+The trigger key has to be held on its own for 0.15 s before the stick shows, so a quick press or a fast
+shortcut like <kbd>⌃</kbd><kbd>C</kbd> doesn't trigger it. If you hold it longer (say, for a <kbd>⌃</kbd>-click),
 the stick shows up too. It never blocks the click.
 
-To start FingerStick at login, add it under *System Settings → General → Login Items*.
+If you pick **Fn**, macOS may also run its own Fn/🌐 action (emoji picker, input source) when you let go.
+Set *System Settings → Keyboard → Press 🌐 key to* **Do Nothing** to stop that.
 
 **Tweaking.** The constants at the top of [`main.swift`](main.swift) control the feel: `tapPeriod` (tap
 speed), `liftDeg` (how far the stick swings), `holdDelay`, and the stick size. Rebuild with `./build.sh`.
@@ -157,7 +162,7 @@ speed), `liftDeg` (how far the stick swings), `holdDelay`, and the stick size. R
 
 ```sh
 build/FingerStick.app/Contents/MacOS/FingerStick --selftest /tmp   # asserts sound + drawing, writes impact.png / lifted.png
-build/FingerStick.app/Contents/MacOS/FingerStick --demo            # pretends Control is held for 2 s, counts taps
+build/FingerStick.app/Contents/MacOS/FingerStick --demo            # pretends the trigger is held for 2 s, counts taps
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -169,9 +174,9 @@ build/FingerStick.app/Contents/MacOS/FingerStick --demo            # pretends Co
 - [x] Tap animation with a sound on every impact
 - [x] Sound picker with synthesized and system sounds
 - [x] Universal build and Homebrew cask
-- [ ] Choose the trigger key (Option, Fn, …)
-- [ ] Use your own sound file
-- [ ] Launch at login toggle in the menu
+- [x] Choose the trigger key (Option, Command, Shift, Fn)
+- [x] Use your own sound file
+- [x] Launch at login toggle in the menu
 - [ ] Notarized builds
 
 See the [open issues](https://github.com/noxhsxrk/finger-stick/issues) for proposed features and known issues.

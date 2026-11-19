@@ -1,5 +1,7 @@
-// FingerStick — hold Control and a pointer-finger stick taps the screen at your cursor.
+// FingerStick — hold a modifier key (Control by default) and a pointer-finger stick taps the screen at your cursor.
 import AppKit
+import ServiceManagement
+import UniformTypeIdentifiers
 
 // MARK: - Tunables
 
@@ -9,7 +11,7 @@ let liftDeg: CGFloat = 7                    // how far the tip swings off the sc
 let anchor = NSPoint(x: 60, y: 330)         // fingertip position inside the overlay window
 let viewSize = NSSize(width: 320, height: 380)
 let tapPeriod = 0.2                         // seconds per tap (5 taps/s)
-let holdDelay = 0.15                        // ignore quick Ctrl taps / Ctrl-shortcuts
+let holdDelay = 0.15                        // ignore quick taps / fast shortcuts
 
 /// 0 = touching the screen (impact), 1 = fully lifted. Slow lift, fast strike.
 func liftAt(_ p: Double) -> CGFloat {
@@ -120,56 +122,155 @@ final class StickView: NSView {
     }
 }
 
+// MARK: - Trigger key
+
+let triggers: [(name: String, flag: NSEvent.ModifierFlags)] = [
+    ("Control", .control), ("Option", .option), ("Command", .command), ("Shift", .shift), ("Fn", .function),
+]
+
+/// True when `trigger` is the only modifier down. Fn is ignored unless it is the trigger,
+/// because arrow and function keys set it on their own.
+func isTriggerAlone(_ flags: NSEvent.ModifierFlags, _ trigger: NSEvent.ModifierFlags) -> Bool {
+    var f = flags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad])
+    if trigger != .function { f.remove(.function) }
+    return f == trigger
+}
+
+func alert(_ title: String, _ info: String) {
+    let a = NSAlert()
+    a.messageText = title
+    a.informativeText = info
+    NSApp.activate(ignoringOtherApps: true)
+    a.runModal()
+}
+
 // MARK: - App
 
-final class App: NSObject, NSApplicationDelegate {
+final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let view = StickView(frame: NSRect(origin: .zero, size: viewSize))
     let win = NSWindow(contentRect: NSRect(origin: .zero, size: viewSize), styleMask: .borderless,
                        backing: .buffered, defer: false)
     var sounds: [NSSound] = []
     var soundIdx = 0
     let systemDir = "/System/Library/Sounds"
+    /// A synth name, a macOS system sound name, or an absolute path to the user's own file.
     var soundName = UserDefaults.standard.string(forKey: "sound") ?? synths[0].name
+    var triggerName = UserDefaults.standard.string(forKey: "trigger")
+        .flatMap { n in triggers.contains { $0.name == n } ? n : nil } ?? "Control"
+    var trigger: NSEvent.ModifierFlags { triggers.first { $0.name == triggerName }?.flag ?? .control }
+
+    let hint = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    let soundSub = NSMenu()
+    let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    var status: NSStatusItem?
+    var heldSince: Date?
+    var tapStart: Date?
+    var lastTap = -1
+    var taps = 0
+    var forceUntil: Date?   // --demo: pretend the trigger key is held
+
+    // MARK: Sound
 
     /// 3 players per sound so fast taps can overlap instead of going silent.
     func loadSounds() {
         if let s = synths.first(where: { $0.name == soundName }) {
             sounds = (0..<3).compactMap { _ in NSSound(data: clackWAV(s)) }
         } else {
-            sounds = (0..<3).compactMap { _ in NSSound(contentsOfFile: "\(systemDir)/\(soundName).aiff", byReference: true) }
+            let path = soundName.hasPrefix("/") ? soundName : "\(systemDir)/\(soundName).aiff"
+            sounds = (0..<3).compactMap { _ in NSSound(contentsOfFile: path, byReference: true) }
         }
-        if sounds.isEmpty && soundName != synths[0].name { soundName = synths[0].name; loadSounds() }   // saved system sound vanished
+        if sounds.isEmpty && soundName != synths[0].name { soundName = synths[0].name; loadSounds() }   // file moved or unreadable
     }
 
-    @objc func pickSound(_ item: NSMenuItem) {
-        soundName = item.title
-        UserDefaults.standard.set(soundName, forKey: "sound")
+    func setSound(_ key: String) {
+        soundName = key
         loadSounds()
-        item.menu?.items.forEach { $0.state = $0.title == soundName ? .on : .off }
+        UserDefaults.standard.set(soundName, forKey: "sound")   // after loading, so a bad file isn't saved
+        rebuildSoundMenu()
         clack()   // preview
     }
 
-    func soundMenu() -> NSMenuItem {
-        let sub = NSMenu()
-        let system = ((try? FileManager.default.contentsOfDirectory(atPath: systemDir)) ?? [])
-            .filter { $0.hasSuffix(".aiff") }.map { String($0.dropLast(5)) }.sorted()
-        for name in synths.map(\.name) + [""] + system {
-            if name.isEmpty { sub.addItem(.separator()); continue }
-            let i = NSMenuItem(title: name, action: #selector(pickSound(_:)), keyEquivalent: "")
+    @objc func pickSound(_ item: NSMenuItem) { setSound(item.representedObject as? String ?? item.title) }
+
+    @objc func chooseSoundFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.message = "Choose a short sound to play on every tap"
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setSound(url.path)
+        if soundName != url.path {
+            alert("FingerStick can't play “\(url.lastPathComponent)”", "Try an AIFF, WAV, MP3 or M4A file.")
+        }
+    }
+
+    func rebuildSoundMenu() {
+        soundSub.removeAllItems()
+        func add(_ title: String, _ key: String) {
+            let i = NSMenuItem(title: title, action: #selector(pickSound(_:)), keyEquivalent: "")
             i.target = self
-            i.state = name == soundName ? .on : .off
+            i.representedObject = key
+            i.state = key == soundName ? .on : .off
+            soundSub.addItem(i)
+        }
+        synths.forEach { add($0.name, $0.name) }
+        soundSub.addItem(.separator())
+        ((try? FileManager.default.contentsOfDirectory(atPath: systemDir)) ?? [])
+            .filter { $0.hasSuffix(".aiff") }.map { String($0.dropLast(5)) }.sorted()
+            .forEach { add($0, $0) }
+        soundSub.addItem(.separator())
+        if soundName.hasPrefix("/") { add((soundName as NSString).lastPathComponent, soundName) }
+        let choose = NSMenuItem(title: "Choose Sound File…", action: #selector(chooseSoundFile), keyEquivalent: "")
+        choose.target = self
+        soundSub.addItem(choose)
+    }
+
+    // MARK: Trigger key
+
+    func triggerMenu() -> NSMenuItem {
+        let sub = NSMenu()
+        for t in triggers {
+            let i = NSMenuItem(title: t.name, action: #selector(pickTrigger(_:)), keyEquivalent: "")
+            i.target = self
+            i.state = t.name == triggerName ? .on : .off
             sub.addItem(i)
         }
-        let root = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
+        let root = NSMenuItem(title: "Trigger Key", action: nil, keyEquivalent: "")
         root.submenu = sub
         return root
     }
-    var status: NSStatusItem?
-    var ctrlSince: Date?
-    var tapStart: Date?
-    var lastTap = -1
-    var taps = 0
-    var forceUntil: Date?   // --demo: pretend Ctrl is held
+
+    @objc func pickTrigger(_ item: NSMenuItem) {
+        triggerName = item.title
+        UserDefaults.standard.set(triggerName, forKey: "trigger")
+        item.menu?.items.forEach { $0.state = $0.title == triggerName ? .on : .off }
+        hint.title = "Hold \(triggerName) to tap"
+    }
+
+    // MARK: Launch at login
+
+    @objc func toggleLogin() {
+        guard #available(macOS 13, *) else { return }
+        let svc = SMAppService.mainApp
+        do {
+            if svc.status == .enabled { try svc.unregister() } else { try svc.register() }
+        } catch {
+            alert("Couldn't change Launch at Login", error.localizedDescription)
+        }
+        if svc.status == .requiresApproval {
+            alert("Allow FingerStick in Login Items", "Turn FingerStick on in System Settings → General → Login Items.")
+            SMAppService.openSystemSettingsLoginItems()
+        }
+        refreshLogin()
+    }
+
+    func refreshLogin() {
+        if #available(macOS 13, *) { loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off }
+    }
+
+    func menuWillOpen(_ menu: NSMenu) { refreshLogin() }   // it can be switched off in System Settings too
+
+    // MARK: Lifecycle
 
     func applicationDidFinishLaunching(_ n: Notification) {
         win.isOpaque = false
@@ -180,15 +281,25 @@ final class App: NSObject, NSApplicationDelegate {
         win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         win.contentView = view
 
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "☝️"
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Hold Control to tap", action: nil, keyEquivalent: ""))
-        menu.addItem(.separator())
         loadSounds()
-        menu.addItem(soundMenu())
+        rebuildSoundMenu()
+        hint.title = "Hold \(triggerName) to tap"
+        let sound = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
+        sound.submenu = soundSub
+        loginItem.target = self
+
+        let menu = NSMenu()
+        menu.delegate = self
+        menu.addItem(hint)
+        menu.addItem(.separator())
+        menu.addItem(triggerMenu())
+        menu.addItem(sound)
+        if #available(macOS 13, *) { menu.addItem(loginItem) }
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit FingerStick", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.title = "☝️"
         item.menu = menu
         status = item
 
@@ -206,11 +317,9 @@ final class App: NSObject, NSApplicationDelegate {
 
     func tick() {
         let now = Date()
-        let flags = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            .subtracting([.capsLock, .function, .numericPad])
-        let ctrl = flags == .control || (forceUntil.map { now < $0 } ?? false)
-        if !ctrl { ctrlSince = nil } else if ctrlSince == nil { ctrlSince = now }
-        let held = ctrlSince.map { now.timeIntervalSince($0) >= holdDelay } ?? false
+        let down = isTriggerAlone(NSEvent.modifierFlags, trigger) || (forceUntil.map { now < $0 } ?? false)
+        if !down { heldSince = nil } else if heldSince == nil { heldSince = now }
+        let held = heldSince.map { now.timeIntervalSince($0) >= holdDelay } ?? false
 
         guard held else {
             if tapStart != nil { win.orderOut(nil); tapStart = nil }
@@ -241,6 +350,10 @@ func selfTest(_ dir: String) -> Int32 {
     precondition(wav.count == 44 + 44100 * 70 / 1000 * 2, "wav size")
     precondition(String(decoding: wav.prefix(4), as: UTF8.self) == "RIFF", "wav header")
     for s in synths { precondition(NSSound(data: clackWAV(s)) != nil, "NSSound can't decode \(s.name)") }
+    precondition(isTriggerAlone(.control, .control) && !isTriggerAlone([.control, .shift], .control), "trigger alone")
+    precondition(isTriggerAlone([.control, .function], .control), "arrow keys (Fn flag) keep Control held")
+    precondition(isTriggerAlone(.function, .function) && !isTriggerAlone(.function, .control), "Fn trigger")
+    precondition(isTriggerAlone([.option, .capsLock], .option), "Caps Lock ignored")
     precondition(liftAt(0) == 0 && abs(liftAt(0.7) - 1) < 1e-9 && abs(liftAt(0.9999)) < 1e-3, "lift curve")
 
     let v = StickView(frame: NSRect(origin: .zero, size: viewSize))
@@ -281,7 +394,7 @@ app.setActivationPolicy(.accessory)
 if args.contains("--demo") {
     delegate.forceUntil = Date().addingTimeInterval(2 + holdDelay)
     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-        print("demo taps: \(delegate.taps) (expected ~\(Int(2 / tapPeriod))), window hidden: \(!delegate.win.isVisible)")
+        print("demo taps: \(delegate.taps) (expected ~\(Int(2 / tapPeriod))), window hidden: \(!delegate.win.isVisible), sound: \(delegate.soundName), menu: \(delegate.hint.title)")
         exit(0)
     }
 }
