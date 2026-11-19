@@ -77,7 +77,7 @@ teaching, and mildly annoying your coworkers on a screen share.
 </p>
 
 * **No permissions.** No Accessibility or Input Monitoring prompts. It only reads which modifier keys are down.
-* **Stays out of the way.** The overlay ignores clicks and never takes focus. It works over full-screen apps, on every Space and every display.
+* **Stays out of the way.** The overlay ignores clicks and never takes focus. It is set to float above full-screen apps and to follow you across Spaces and displays.
 * **18 sounds.** Four synthesized taps (Clack, Knock, Tick, Bonk) plus every built-in macOS alert sound.
 * **Tiny.** One Swift file, all art drawn in code, no dependencies. Lives in the menu bar as ☝️.
 
@@ -144,8 +144,9 @@ cd finger-stick
 | Click ☝️ → **Sound** | Pick a sound. It plays a preview and is remembered |
 | Click ☝️ → **Quit FingerStick** | Quit |
 
-Control has to be held on its own for 0.15 s before the stick shows. A quick press and Control shortcuts
-like <kbd>⌃</kbd><kbd>C</kbd> or <kbd>⌃</kbd>-click never trigger it.
+Control has to be held on its own for 0.15 s before the stick shows, so a quick press or a fast shortcut
+like <kbd>⌃</kbd><kbd>C</kbd> doesn't trigger it. If you hold Control longer (say, for a <kbd>⌃</kbd>-click),
+the stick shows up too. It never blocks the click.
 
 To start FingerStick at login, add it under *System Settings → General → Login Items*.
 
