@@ -107,6 +107,8 @@ teaching, and mildly annoying your coworkers on a screen share.
 **With Homebrew (recommended)**
 
 ```sh
+brew tap noxhsxrk/nox
+brew trust --cask noxhsxrk/nox/fingerstick   # Homebrew 7+ only loads third-party casks you trust
 brew install --cask noxhsxrk/nox/fingerstick
 open -a FingerStick
 ```
