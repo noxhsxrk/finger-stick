@@ -277,7 +277,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         win.backgroundColor = .clear
         win.hasShadow = false
         win.ignoresMouseEvents = true
-        win.level = .screenSaver
+        // Above games/players that capture the display or float their full-screen window high; still below the cursor.
+        win.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
         win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         win.contentView = view
 

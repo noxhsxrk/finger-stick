@@ -77,7 +77,7 @@ teaching, and mildly annoying your coworkers on a screen share.
 </p>
 
 * **No permissions.** No Accessibility or Input Monitoring prompts. It only reads which modifier keys are down.
-* **Stays out of the way.** The overlay ignores clicks and never takes focus. It is set to float above full-screen apps and to follow you across Spaces and displays.
+* **Stays out of the way.** The overlay ignores clicks and never takes focus. It floats above full-screen apps, including games and video players that put their window above everything else, and is set to follow you across Spaces and displays.
 * **Any sound.** Four synthesized taps (Clack, Knock, Tick, Bonk), every built-in macOS alert sound, or your own audio file.
 * **Your key.** Trigger it with Control, Option, Command, Shift or Fn.
 * **Tiny.** One Swift file, all art drawn in code, no dependencies. Lives in the menu bar as ☝️.
